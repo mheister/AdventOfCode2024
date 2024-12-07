@@ -21,12 +21,27 @@ pub fn main() !void {
     }
 
     const wordsearch = try load_wordsearch(a, infile);
-    const cnt = search_rows(&wordsearch) + search_cols(&wordsearch) + search_diagonals(&wordsearch);
-
-    _ = try stdout.print("The number of XMAS is {}\n", .{cnt});
-    // _ = try stdout.print("The number of XMAS is really (part two) {}\n", .{0});
+    const cnt1 = search_rows(&wordsearch) + search_cols(&wordsearch) + search_diagonals(&wordsearch);
+    _ = try stdout.print("The number of XMAS is {}\n", .{cnt1});
+    const cnt2 = searh_x_mas(&wordsearch);
+    _ = try stdout.print("The number of XMAS is really (part two) {}\n", .{cnt2});
 
     try bw.flush();
+}
+
+fn searh_x_mas(grid: *const Grid(u8)) usize {
+    var count: usize = 0;
+    for (1..grid.height() - 1) |row| {
+        for (1..grid.width - 1) |col| {
+            if (grid.cr(row)[col] != 'A') continue;
+            const pd: [2]u8 = .{ grid.cr(row - 1)[col - 1], grid.cr(row + 1)[col + 1] };
+            if (!std.mem.eql(u8, &pd, "MS") and !std.mem.eql(u8, &pd, "SM")) continue;
+            const nd = .{ grid.cr(row + 1)[col - 1], grid.cr(row - 1)[col + 1] };
+            if (!std.mem.eql(u8, &nd, "MS") and !std.mem.eql(u8, &nd, "SM")) continue;
+            count += 1;
+        }
+    }
+    return count;
 }
 
 fn search_rows(grid: *const Grid(u8)) usize {
