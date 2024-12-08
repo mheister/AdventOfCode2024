@@ -16,11 +16,17 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "01",
+        .name = "day01",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    const utils = b.dependency("utils", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("utils", utils.module("utils"));
 
     const mecha = b.dependency("mecha", .{
         .target = target,

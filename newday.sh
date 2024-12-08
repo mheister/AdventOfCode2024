@@ -16,5 +16,8 @@ fi
 
 cp -r day01 "$next_day"
 cd "$next_day" || exit 7
-touch example_input.txt
-touch input.txt
+echo > example_input.txt
+echo > input.txt
+for f in build.zig*; do
+    sed -i "s/day01/$next_day/g" "$f"
+done

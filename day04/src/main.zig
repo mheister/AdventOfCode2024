@@ -1,5 +1,5 @@
 const std = @import("std");
-const Grid = @import("grid.zig").Grid;
+const Grid = @import("utils").Grid;
 
 const dbg = std.log.debug;
 
