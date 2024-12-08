@@ -65,16 +65,28 @@ test "parse input test" {
 }
 
 fn update_ok(a: std.mem.Allocator, update: []u32, rules: []struct { u32, u32 }) !bool {
-    var seen = std.AutoArrayHashMap(u32, u1).init(a); // ignoring values, used as a set
+    var seen = std.AutoArrayHashMap(u32, void).init(a);
     defer seen.deinit();
     for (update) |page| {
         for (rules) |rule| {
             if (rule[0] != page) continue;
             if (seen.contains(rule[1])) return false;
         }
-        try seen.put(page, 0);
+        try seen.put(page, {});
     }
     return true;
+}
+
+pub fn sort_to_rules(rules: []struct { u32, u32 }, a: u32, b: u32) bool {
+    for (rules) |rule| {
+        if (rule[0] == a and rule[1] == b) return true;
+        if (rule[1] == a and rule[0] == b) return false;
+    }
+    return a < b;
+}
+
+fn fix_update(update: []u32, rules: []struct { u32, u32 }) !void {
+    std.mem.sort(u32, update, rules, sort_to_rules);
 }
 
 fn mid_page(update: []u32) u32 {
@@ -112,14 +124,25 @@ pub fn main() !void {
     dbg("{any}", .{input});
 
     var sum: usize = 0;
+    var sum_fixed: usize = 0;
     for (input.updates) |update| {
-        if (!try update_ok(a, update, input.rules)) continue;
-        const mid = mid_page(update);
-        dbg("Update ok {any}, mid page {}", .{ update, mid });
-        sum += mid;
+        if (try update_ok(a, update, input.rules)) {
+            const mid = mid_page(update);
+            dbg("Update ok {any}, mid page {}", .{ update, mid });
+            sum += mid;
+        } else {
+            try fix_update(update, input.rules);
+            const mid = mid_page(update);
+            dbg("Update fixed {any}, mid page {}", .{ update, mid });
+            sum_fixed += mid;
+        }
     }
 
-    _ = try stdout.print("The sum of middle page numbers is {}", .{sum});
+    _ = try stdout.print("The sum of middle page numbers is {}\n", .{sum});
+    _ = try stdout.print(
+        "The sum of middle page numbers of fixed updates is {}\n",
+        .{sum_fixed},
+    );
 
     try bw.flush();
 }
