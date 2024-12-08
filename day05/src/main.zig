@@ -64,6 +64,23 @@ test "parse input test" {
     try expect(std.mem.eql(u32, res.updates[1], &.{8}));
 }
 
+fn update_ok(a: std.mem.Allocator, update: []u32, rules: []struct { u32, u32 }) !bool {
+    var seen = std.AutoArrayHashMap(u32, u1).init(a); // ignoring values, used as a set
+    defer seen.deinit();
+    for (update) |page| {
+        for (rules) |rule| {
+            if (rule[0] != page) continue;
+            if (seen.contains(rule[1])) return false;
+        }
+        try seen.put(page, 0);
+    }
+    return true;
+}
+
+fn mid_page(update: []u32) u32 {
+    return update[update.len / 2];
+}
+
 pub fn main() !void {
     const a = std.heap.page_allocator;
 
@@ -92,7 +109,17 @@ pub fn main() !void {
     const input = try parse_input(a, input_str);
     defer input.deinit(a);
 
-    _ = try stdout.print("Input {any}\n", .{input});
+    dbg("{any}", .{input});
+
+    var sum: usize = 0;
+    for (input.updates) |update| {
+        if (!try update_ok(a, update, input.rules)) continue;
+        const mid = mid_page(update);
+        dbg("Update ok {any}, mid page {}", .{ update, mid });
+        sum += mid;
+    }
+
+    _ = try stdout.print("The sum of middle page numbers is {}", .{sum});
 
     try bw.flush();
 }
