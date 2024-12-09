@@ -16,6 +16,18 @@ pub fn Grid(T: type) type {
             };
         }
 
+        // clone the grid using the same allocator
+        pub fn clone(self: *@This()) !@This() {
+            const new = @This(){
+                .data = try self.allocator.alloc(T, self.size),
+                .width = self.width,
+                .size = self.size,
+                .allocator = self.allocator,
+            };
+            @memcpy(new.data, self.data);
+            return new;
+        }
+
         pub fn deinit(self: *@This()) void {
             self.allocator.free(self.data);
         }
@@ -40,7 +52,7 @@ pub fn Grid(T: type) type {
 
         // find the first index (row, column) of a given element
         pub fn indexOf(self: *const @This(), element: T) ?struct { row: usize, col: usize } {
-            const flatidx = std.mem.indexOfScalar(T, self.data, element).?;
+            const flatidx = std.mem.indexOfScalar(T, self.data, element) orelse return null;
             return .{
                 .row = flatidx / self.width,
                 .col = flatidx % self.width,

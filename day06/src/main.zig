@@ -78,25 +78,61 @@ fn grid_elem(grid: *Grid(u8), pos: Pos) ?*u8 {
     return &grid.r(coord.row)[coord.col];
 }
 
-fn guard_walk(grid: *Grid(u8)) usize {
+fn guard_walk(grid: *Grid(u8)) ?usize {
     const start = grid.indexOf('^') orelse unreachable;
     var pos: Pos = .{ .row = @intCast(start.row), .col = @intCast(start.col) };
     var count: usize = 1;
     var dir = Pos.up;
-    while (true) {
+    // guard can walk at most each inner field once in each direction and then out; could
+    // think of more efficient ways to detect infinite walks if needed
+    const max_steps = 4 * (grid.height() - 2) * (grid.width - 2) + 1;
+    return for (0..max_steps) |_| {
+        const next: struct { Pos, u8 } = (for (1..4) |_| {
+            const next_pos = pos.add(dir);
+            const next_ch = grid_elem(grid, next_pos) orelse break null;
+            if (next_ch.* != '#') break .{ next_pos, next_ch.* };
+            dir = dir.rot90();
+        } else null) orelse break count;
+        if (next[1] != 'X') {
+            count += 1;
+        }
+        grid_elem(grid, pos).?.* = 'X';
+        pos = next[0];
+    } else null;
+}
+
+fn nof_possible_obstacles_to_put_guardian_in_loop(grid: *Grid(u8)) !usize {
+    const start = grid.indexOf('^') orelse unreachable;
+    const startpos: Pos = .{ .row = @intCast(start.row), .col = @intCast(start.col) };
+    dbg("Start @ {any}", .{startpos});
+    var count: usize = 0;
+    var pos = startpos;
+    var dir = Pos.up;
+    var attempt_count: usize = 0;
+    for (0..2 * grid.size) |_| {
         const next: struct { Pos, u8 } = (for (1..4) |_| {
             const next_pos = pos.add(dir);
             const next_ch = grid_elem(grid, next_pos) orelse break null;
             if (next_ch.* != '#') break .{ next_pos, next_ch.* };
             dir = dir.rot90();
         } else null) orelse break;
-        if (next[1] != 'X') {
-            count += 1;
+        if (next[1] != 'X' and next[1] != '^' and next[1] != '#') {
+            attempt_count += 1;
+            // possible position for additional obstacle
+            var subgrid = try grid.clone();
+            defer subgrid.deinit();
+            grid_elem(&subgrid, next[0]).?.* = '#';
+            if (guard_walk(&subgrid) == null) {
+                dbg("Loop with obstacle @ {any}", .{next[0]});
+                count += 1;
+            }
         }
-        grid_elem(grid, pos).?.* = 'X';
+        if (grid_elem(grid, pos).?.* != '^') {
+            grid_elem(grid, pos).?.* = 'X';
+        }
         pos = next[0];
-        dbg("{any}", .{pos});
     }
+    std.log.info("attempted {} obstacle positions", .{attempt_count});
     return count;
 }
 
@@ -118,8 +154,11 @@ pub fn main() !void {
     }
 
     var map = try load_map(a, infile);
-    const cnt1 = guard_walk(&map);
+    const cnt1 = guard_walk(&map).?;
     _ = try stdout.print("The number of guard steps is {}\n", .{cnt1});
+    map = try load_map(a, infile);
+    const cnt2 = try nof_possible_obstacles_to_put_guardian_in_loop(&map);
+    _ = try stdout.print("The number of additional obstacle positions is {}\n", .{cnt2});
 
     try bw.flush();
 }
