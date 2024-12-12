@@ -62,23 +62,47 @@ test "parse input test" {
     try expect(std.mem.eql(u32, eqns[0].operands, &.{ 10, 19 }));
 }
 
+fn decimal_concat(a: u64, b: u64) !u64 {
+    const max_len = 20;
+    var buf: [max_len]u8 = undefined;
+    const number_str = try std.fmt.bufPrint(&buf, "{}{}", .{ a, b });
+    return try std.fmt.parseInt(u64, number_str, 10);
+}
+
 const EqnChecker = struct {
-    const WorkItem = struct { pos: usize, intermed: u64, op: Op };
-    const Op = enum { Mul, Plus };
+    const WorkItem = struct {
+        pos: usize,
+        intermed: u64,
+        op: Op,
+    };
+    const Op = enum { Mul, Plus, Concat };
+
     a: std.mem.Allocator,
     work: std.ArrayList(WorkItem), // flyweight
+
     fn init(a: std.mem.Allocator) @This() {
         return @This(){ .a = a, .work = std.ArrayList(WorkItem).init(a) };
     }
+
     fn deinit(this: @This()) void {
         this.work.deinit();
     }
-    fn check(this: *@This(), eqn: Equation) !bool {
+
+    fn check(this: *@This(), eqn: Equation, concat: bool) !bool {
         this.work.clearRetainingCapacity();
         try this.work.appendSlice(&.{
             .{ .pos = 1, .intermed = eqn.operands[0], .op = Op.Plus },
             .{ .pos = 1, .intermed = eqn.operands[0], .op = Op.Mul },
         });
+        if (concat) {
+            try this.work.append(
+                .{
+                    .pos = 1,
+                    .intermed = eqn.operands[0],
+                    .op = Op.Concat,
+                },
+            );
+        }
         while (this.work.items.len > 0) {
             const e = this.work.pop();
             if (e.pos == eqn.operands.len) {
@@ -90,6 +114,7 @@ const EqnChecker = struct {
             const intermed = switch (e.op) {
                 Op.Mul => e.intermed * eqn.operands[e.pos],
                 Op.Plus => e.intermed + eqn.operands[e.pos],
+                Op.Concat => try decimal_concat(e.intermed, eqn.operands[e.pos]),
             };
             if (intermed > eqn.result) {
                 continue;
@@ -98,6 +123,11 @@ const EqnChecker = struct {
                 .{ .pos = e.pos + 1, .intermed = intermed, .op = Op.Plus },
                 .{ .pos = e.pos + 1, .intermed = intermed, .op = Op.Mul },
             });
+            if (concat) {
+                try this.work.append(
+                    .{ .pos = e.pos + 1, .intermed = intermed, .op = Op.Concat },
+                );
+            }
         }
         return false;
     }
@@ -131,18 +161,24 @@ pub fn main() !void {
     const calibration = try parse_input(a, input);
     defer calibration.deinit(a);
 
-    var sum: u64 = 0;
-
     var checker = EqnChecker.init(a);
     defer checker.deinit();
 
+    var sum1: u64 = 0;
     for (calibration.equations) |eqn| {
-        if (try checker.check(eqn)) {
-            sum += eqn.result;
+        if (try checker.check(eqn, false)) {
+            sum1 += eqn.result;
         }
     }
+    _ = try stdout.print("The sum is {}\n", .{sum1});
 
-    _ = try stdout.print("The sum is {}\n", .{sum});
+    var sum2: u64 = 0;
+    for (calibration.equations) |eqn| {
+        if (try checker.check(eqn, true)) {
+            sum2 += eqn.result;
+        }
+    }
+    _ = try stdout.print("The sum is really (with concat operator) {}\n", .{sum2});
 
     try bw.flush();
 }
