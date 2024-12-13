@@ -67,8 +67,9 @@ fn intCast32(number: anytype) i32 {
     return @as(i32, @intCast(number));
 }
 
-fn count_antinodes(city: *const City) !u32 {
-    var alc = std.heap.stackFallback(2048, std.heap.page_allocator);
+fn count_antinodes(city: *const City, comptime harmonics: bool) !u32 {
+    const memreq = if (harmonics) 2 * 8 * 50 * 50 else 2048;
+    var alc = std.heap.stackFallback(memreq, std.heap.page_allocator);
     var antinodes = std.AutoArrayHashMap(struct { u32, u32 }, void) //
         .init(alc.get());
     for (city.antennas) |a| {
@@ -76,15 +77,21 @@ fn count_antinodes(city: *const City) !u32 {
             if (a.freq != b.freq) continue;
             if (a.row == b.row and a.col == b.col) continue;
             // project from a forwards over b
-            const row: i32 = 2 * intCast32(b.row) - intCast32(a.row);
-            const col: i32 = 2 * intCast32(b.col) - intCast32(a.col);
-            if (row < 0 or row >= city.height or //
-                col < 0 or col >= city.width) continue;
-            dbg("{any} -> {any} -> {}, {}", .{ a, b, row, col });
-            try antinodes.put(.{ @intCast(row), @intCast(col) }, {});
+            const dr = intCast32(b.row) - intCast32(a.row);
+            const dc = intCast32(b.col) - intCast32(a.col);
+            std.debug.assert(dr != 0 or dc != 0);
+            const rng_start = if (harmonics) 0 else 1;
+            const rng_end = if (harmonics) 50 else 2;
+            for (rng_start..rng_end) |stp| {
+                const row = intCast32(b.row) + intCast32(stp) * dr;
+                const col = intCast32(b.col) + intCast32(stp) * dc;
+                if (row < 0 or row >= city.height or //
+                    col < 0 or col >= city.width) break;
+                dbg("{any} -> {any} -> {}, {}", .{ a, b, row, col });
+                try antinodes.put(.{ @intCast(row), @intCast(col) }, {});
+            }
         }
     }
-    dbg("{any}", .{antinodes.keys()});
     return @intCast(antinodes.count());
 }
 
@@ -115,11 +122,19 @@ pub fn main() !void {
     const input = try file.readToEndAlloc(a, std.math.pow(u32, 2, 20));
     const city = try City.init_from_input(a, input);
 
-    dbg("City: {any}", .{city});
-    std.log.debug("Calculatig sum", .{});
-    const sum: u64 = try count_antinodes(&city);
+    const num_antinodes: u64 = try count_antinodes(&city, false);
 
-    _ = try stdout.print("The sum is {}\n", .{sum});
+    _ = try stdout.print(
+        "The number of distinct positions with antinodes is {}\n",
+        .{num_antinodes},
+    );
+
+    const num_antinodes_2: u64 = try count_antinodes(&city, true);
+
+    _ = try stdout.print(
+        "The number of distinct positions with antinodes is really {}\n",
+        .{num_antinodes_2},
+    );
 
     try bw.flush();
 }
