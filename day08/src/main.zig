@@ -28,8 +28,8 @@ const City = struct {
         var line_it = utils.enumerate(std.mem.splitScalar(u8, input, '\n'));
         res.width = @intCast(line_it.peek().?.val.len);
         while (line_it.next()) |line| {
-            res.height = @intCast(line.idx + 1);
             if (line.val.len == 0) break; // trailing newline
+            res.height = @intCast(line.idx + 1);
             for (0.., line.val) |col, ch| {
                 if (ch == '.') continue;
                 try antennas.append(
@@ -63,6 +63,31 @@ test "parse_input" {
     );
 }
 
+fn intCast32(number: anytype) i32 {
+    return @as(i32, @intCast(number));
+}
+
+fn count_antinodes(city: *const City) !u32 {
+    var alc = std.heap.stackFallback(2048, std.heap.page_allocator);
+    var antinodes = std.AutoArrayHashMap(struct { u32, u32 }, void) //
+        .init(alc.get());
+    for (city.antennas) |a| {
+        for (city.antennas) |b| {
+            if (a.freq != b.freq) continue;
+            if (a.row == b.row and a.col == b.col) continue;
+            // project from a forwards over b
+            const row: i32 = 2 * intCast32(b.row) - intCast32(a.row);
+            const col: i32 = 2 * intCast32(b.col) - intCast32(a.col);
+            if (row < 0 or row >= city.height or //
+                col < 0 or col >= city.width) continue;
+            dbg("{any} -> {any} -> {}, {}", .{ a, b, row, col });
+            try antinodes.put(.{ @intCast(row), @intCast(col) }, {});
+        }
+    }
+    dbg("{any}", .{antinodes.keys()});
+    return @intCast(antinodes.count());
+}
+
 pub fn main() !void {
     const a = std.heap.page_allocator;
 
@@ -88,10 +113,11 @@ pub fn main() !void {
     defer file.close();
 
     const input = try file.readToEndAlloc(a, std.math.pow(u32, 2, 20));
-    const data = try City.init_from_input(a, input);
+    const city = try City.init_from_input(a, input);
 
+    dbg("City: {any}", .{city});
     std.log.debug("Calculatig sum", .{});
-    const sum: u64 = data.items.len;
+    const sum: u64 = try count_antinodes(&city);
 
     _ = try stdout.print("The sum is {}\n", .{sum});
 
