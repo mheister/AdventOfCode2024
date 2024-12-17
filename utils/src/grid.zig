@@ -17,7 +17,7 @@ pub fn Grid(T: type) type {
         }
 
         // clone the grid using the same allocator
-        pub fn clone(self: *@This()) !@This() {
+        pub fn clone(self: *const @This()) !@This() {
             const new = @This(){
                 .data = try self.allocator.alloc(T, self.size),
                 .width = self.width,
