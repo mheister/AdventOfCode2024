@@ -50,6 +50,10 @@ pub fn Grid(T: type) type {
             return .{ .grid = self };
         }
 
+        pub fn allPositions(self: *const @This()) AllPosIterator {
+            return .{ .width = self.width, .size = self.data.len };
+        }
+
         pub fn atPos(self: *const @This(), pos: Pos) ?T {
             if (pos.row > self.height()) return null;
             if (pos.col > self.width) return null;
@@ -66,6 +70,25 @@ pub fn Grid(T: type) type {
             return .{ .grid = self, .around = pos };
         }
 
+        pub fn cardinalNeighbourPositions(
+            self: *const @This(),
+            pos: Pos,
+        ) [4]?Pos {
+            if (self.size == 0) return [_]?Pos{ null, null, null, null };
+            return [4]?Pos{
+                if (pos.col > 0) .{ .row = pos.row, .col = pos.col - 1 } else null,
+                if (pos.row > 0) .{ .row = pos.row - 1, .col = pos.col } else null,
+                if (pos.col < self.width - 1) .{
+                    .row = pos.row,
+                    .col = pos.col + 1,
+                } else null,
+                if (pos.row < self.height() - 1) .{
+                    .row = pos.row + 1,
+                    .col = pos.col,
+                } else null,
+            };
+        }
+
         // find the first index (row, column) of a given element
         pub fn indexOf(self: *const @This(), element: T) ?Pos {
             const flatidx = std.mem.indexOfScalar(T, self.data, element) orelse return null;
@@ -73,6 +96,13 @@ pub fn Grid(T: type) type {
                 .row = flatidx / self.width,
                 .col = flatidx % self.width,
             };
+        }
+
+        pub fn log(self: *@This()) void {
+            var it = self.crows();
+            while (it.next()) |row| {
+                std.log.debug("{s}", .{row});
+            }
         }
     };
 }
@@ -92,6 +122,23 @@ pub fn ConstRowIterator(T: type) type {
         }
     };
 }
+
+const AllPosIterator = struct {
+    width: usize,
+    size: usize,
+    current: usize = 0,
+    pub fn next(self: *@This()) ?Pos {
+        if (self.current == self.size) {
+            return null;
+        }
+        const flatidx = self.current;
+        self.current += 1;
+        return .{
+            .row = flatidx / self.width,
+            .col = flatidx % self.width,
+        };
+    }
+};
 
 pub fn CardinalNeighbourIterator(T: type) type {
     return struct {
