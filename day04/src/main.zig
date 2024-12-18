@@ -1,5 +1,6 @@
 const std = @import("std");
-const Grid = @import("utils").Grid;
+const utils = @import("utils");
+const Grid = utils.Grid;
 
 const dbg = std.log.debug;
 
@@ -20,7 +21,7 @@ pub fn main() !void {
         infile = "example_input.txt";
     }
 
-    const wordsearch = try load_wordsearch(a, infile);
+    const wordsearch = try utils.loadGridFromFile(a, infile);
     const cnt1 = search_rows(&wordsearch) + search_cols(&wordsearch) + search_diagonals(&wordsearch);
     _ = try stdout.print("The number of XMAS is {}\n", .{cnt1});
     const cnt2 = searh_x_mas(&wordsearch);
@@ -159,46 +160,4 @@ test "XmasAcceptor.more" {
     try std.testing.expectEqual(0, acp.take('M'));
     try std.testing.expectEqual(0, acp.take('A'));
     try std.testing.expectEqual(1, acp.take('S'));
-}
-
-fn load_wordsearch(a: std.mem.Allocator, filepath: []const u8) !Grid(u8) {
-    dbg("Reading {s}", .{filepath});
-    const file = std.fs.cwd().openFile(filepath, .{}) catch |err| {
-        std.log.err("Failed to open file: {s}", .{@errorName(err)});
-        return err;
-    };
-    defer file.close();
-
-    var buf_reader = std.io.bufferedReader(file.reader());
-
-    var line = std.ArrayList(u8).init(a);
-    defer line.deinit();
-    const writer = line.writer();
-    try buf_reader.reader().streamUntilDelimiter(writer, '\n', null);
-    try file.seekTo(0);
-    buf_reader = std.io.bufferedReader(file.reader());
-
-    const width = line.items.len;
-    // this might not work on windows
-    const height = try file.getEndPos() / (width + 1);
-    var grid = try Grid(u8).init(a, width, height);
-
-    line.clearRetainingCapacity();
-    const reader = buf_reader.reader();
-    var line_no: usize = 0;
-    while (reader.streamUntilDelimiter(writer, '\n', null)) {
-        defer line.clearRetainingCapacity();
-        const gridrow = grid.r(line_no);
-        @memcpy(gridrow, line.items);
-        line_no += 1;
-    } else |err| switch (err) {
-        error.EndOfStream => { // end of file
-            if (line.items.len > 0) {
-                line_no += 1;
-                dbg("LASTLINE {d}--{s}\n", .{ line_no, line.items });
-            }
-        },
-        else => return err,
-    }
-    return grid;
 }
