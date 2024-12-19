@@ -3,21 +3,21 @@ const mcha = @import("mecha");
 
 const ButtonA = mcha.combine(.{
     mcha.string("Button A: X+").discard(),
-    mcha.int(u32, .{}),
+    mcha.int(u64, .{}),
     mcha.string(", Y+").discard(),
-    mcha.int(u32, .{}),
+    mcha.int(u64, .{}),
 });
 const ButtonB = mcha.combine(.{
     mcha.string("Button B: X+").discard(),
-    mcha.int(u32, .{}),
+    mcha.int(u64, .{}),
     mcha.string(", Y+").discard(),
-    mcha.int(u32, .{}),
+    mcha.int(u64, .{}),
 });
 const Prize = mcha.combine(.{
     mcha.string("Prize: X=").discard(),
-    mcha.int(u32, .{}),
+    mcha.int(u64, .{}),
     mcha.string(", Y=").discard(),
-    mcha.int(u32, .{}),
+    mcha.int(u64, .{}),
 });
 const NewLine = mcha.ascii.char('\n').discard();
 const MachinePrsr = mcha.combine(.{
@@ -65,35 +65,35 @@ test "parse input test" {
 }
 
 const Machine = struct {
-    button_a: struct { u32, u32 }, // xy
-    button_b: struct { u32, u32 }, // xy
-    prize: struct { u32, u32 }, // xy
+    button_a: struct { u64, u64 }, // xy
+    button_b: struct { u64, u64 }, // xy
+    prize: struct { u64, u64 }, // xy
 };
 
-fn asI32(i: u32) i32 {
-    return @as(i32, @intCast(i));
+fn asI128(i: u64) i128 {
+    return @as(i128, @intCast(i));
 }
 
 // return cost of winning or zero if impossible
-fn win(m: Machine) u32 {
+fn win(m: Machine) u64 {
     // solving for a and b
     // btn_a.x * a + btn_b.x * b = prz.x
     // btn_a.y * a + btn_b.y * b = prz.y
 
     const determinant =
-        asI32(m.button_a[0] * m.button_b[1]) - asI32(m.button_a[1] * m.button_b[0]);
+        asI128(m.button_a[0] * m.button_b[1]) - asI128(m.button_a[1] * m.button_b[0]);
 
-    var a: u32 = undefined;
-    var b: u32 = undefined;
+    var a: u64 = undefined;
+    var b: u64 = undefined;
 
     if (determinant != 0) {
         // Cramer's rule
         a = @intCast(@max(0, @divTrunc(
-            (asI32(m.prize[0] * m.button_b[1]) - asI32(m.prize[1] * m.button_b[0])),
+            (asI128(m.prize[0] * m.button_b[1]) - asI128(m.prize[1] * m.button_b[0])),
             determinant,
         )));
         b = @intCast(@max(0, @divTrunc(
-            (asI32(m.button_a[0] * m.prize[1]) - asI32(m.button_a[1] * m.prize[0])),
+            (asI128(m.button_a[0] * m.prize[1]) - asI128(m.button_a[1] * m.prize[0])),
             determinant,
         )));
     } else {
@@ -101,7 +101,7 @@ fn win(m: Machine) u32 {
         // btn_a.x * a + btn_b.x * b = prz.x
         const b_guess = @divFloor(m.prize[0], m.button_b[0]);
         a = std.math.divCeil(
-            u32,
+            u64,
             (m.prize[0] - m.button_b[0] * b_guess),
             m.button_a[0],
         ) catch unreachable;
@@ -112,6 +112,17 @@ fn win(m: Machine) u32 {
         return 3 * a + b;
     }
     return 0;
+}
+
+fn fix_unit_conversion(m: Machine) Machine {
+    return .{
+        .button_a = m.button_a,
+        .button_b = m.button_b,
+        .prize = .{
+            m.prize[0] + 10000000000000,
+            m.prize[1] + 10000000000000,
+        },
+    };
 }
 
 pub fn main() !void {
@@ -138,7 +149,7 @@ pub fn main() !void {
     };
     defer file.close();
 
-    const input = try file.readToEndAlloc(a, std.math.pow(u32, 2, 20));
+    const input = try file.readToEndAlloc(a, std.math.pow(u64, 2, 20));
     const machines = try parse_input(a, input);
     defer a.free(machines);
 
@@ -150,5 +161,15 @@ pub fn main() !void {
     }
 
     _ = try stdout.print("Winning it all costs at least {} tokens\n", .{sum});
+
+    var sum2: usize = 0;
+    for (machines) |m| {
+        const cost = win(fix_unit_conversion(m));
+        std.log.debug("Machine costs {}", .{cost});
+        sum2 += cost;
+    }
+
+    _ = try stdout.print("Winning it all actually costs at least {} tokens\n", .{sum2});
+
     try bw.flush();
 }
