@@ -98,7 +98,7 @@ pub fn Grid(T: type) type {
             };
         }
 
-        pub fn log(self: *@This()) void {
+        pub fn log(self: *const @This()) void {
             var it = self.crows();
             while (it.next()) |row| {
                 std.log.debug("{s}", .{row});
@@ -220,6 +220,53 @@ pub fn loadGridFromFile(a: std.mem.Allocator, filepath: []const u8) !Grid(u8) {
         defer line.clearRetainingCapacity();
         const gridrow = grid.r(line_no);
         @memcpy(gridrow, line.items);
+        line_no += 1;
+    } else |err| switch (err) {
+        error.EndOfStream => { // end of file
+            if (line.items.len > 0) {
+                return error.PleaseAddTrailingNewLine;
+            }
+        },
+        else => return err,
+    }
+    return grid;
+}
+
+// load a Grid(u8) from a text file and add 1-wide a border all around
+pub fn loadGridFromFileWithBorder(
+    a: std.mem.Allocator,
+    filepath: []const u8,
+    border_char: u8,
+) !Grid(u8) {
+    const file = std.fs.cwd().openFile(filepath, .{}) catch |err| {
+        std.log.err("Failed to open file: {s}", .{@errorName(err)});
+        return err;
+    };
+    defer file.close();
+
+    var buf_reader = std.io.bufferedReader(file.reader());
+
+    var line = std.ArrayList(u8).init(a);
+    defer line.deinit();
+    const writer = line.writer();
+    try buf_reader.reader().streamUntilDelimiter(writer, '\n', null);
+    try file.seekTo(0);
+    buf_reader = std.io.bufferedReader(file.reader());
+
+    const width_inner = line.items.len;
+    // this might not work on windows
+    const height_inner = try file.getEndPos() / (width_inner + 1);
+    var grid = try Grid(u8).init(a, width_inner + 2, height_inner + 2);
+
+    @memset(grid.data, border_char);
+
+    line.clearRetainingCapacity();
+    const reader = buf_reader.reader();
+    var line_no: usize = 1;
+    while (reader.streamUntilDelimiter(writer, '\n', null)) {
+        defer line.clearRetainingCapacity();
+        const gridrow = grid.r(line_no);
+        @memcpy(gridrow[1 .. width_inner + 1], line.items);
         line_no += 1;
     } else |err| switch (err) {
         error.EndOfStream => { // end of file
