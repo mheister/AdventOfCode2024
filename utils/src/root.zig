@@ -4,6 +4,7 @@ const testing = std.testing;
 pub const grid = @import("grid.zig");
 pub const Grid = grid.Grid;
 pub const loadGridFromFile = grid.loadGridFromFile;
+pub const loadGridFromFileWithBorder = grid.loadGridFromFileWithBorder;
 
 pub const enumerate = @import("iter.zig").enumerate;
 
