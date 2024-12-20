@@ -191,6 +191,25 @@ test "grid.cardinalNeighbours" {
     }
 }
 
+// load a Grid(u8) from string
+pub fn loadGridFromStr(a: std.mem.Allocator, string: []const u8) !Grid(u8) {
+    var line_it = std.mem.splitScalar(u8, string, '\n');
+
+    const width = line_it.peek().?.len;
+    // this might not work on windows
+    const height_ = (string.len + 1) / (width + 1);
+    var grid = try Grid(u8).init(a, width, height_);
+
+    var line_no: usize = 0;
+    while (line_it.next()) |line| {
+        std.debug.assert(line.len == width);
+        const gridrow = grid.r(line_no);
+        @memcpy(gridrow, line);
+        line_no += 1;
+    }
+    return grid;
+}
+
 // load a Grid(u8) from a text file
 pub fn loadGridFromFile(a: std.mem.Allocator, filepath: []const u8) !Grid(u8) {
     const file = std.fs.cwd().openFile(filepath, .{}) catch |err| {
