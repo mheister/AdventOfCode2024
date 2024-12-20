@@ -1,5 +1,6 @@
 const std = @import("std");
 const mcha = @import("mecha");
+const utils = @import("utils");
 
 const Vec2d = struct { x: i32, y: i32 };
 const Robot = struct { pos: Vec2d, velo: Vec2d };
@@ -109,6 +110,15 @@ const QuadrantCounter = struct {
     fn get_safety_factor(self: @This()) usize {
         return self.quads[0] * self.quads[1] * self.quads[2] * self.quads[3];
     }
+    fn get_christmas_tree_likelihood(self: @This()) f64 {
+        // counting on most bots being in lower quadrants does not seem to find it:
+        // return @as(f64, @floatFromInt(self.quads[2] + self.quads[3])) /
+        //     @as(f64, @floatFromInt(
+        //     self.quads[0] + self.quads[1] + self.quads[2] + self.quads[3],
+        // ));
+        // maybe the christmas tree leaves some quadrants empty, try a low safety factor:
+        return 226548000.0 / (226548000.0 + @as(f64, @floatFromInt(self.get_safety_factor())));
+    }
 };
 
 pub fn main() !void {
@@ -139,14 +149,41 @@ pub fn main() !void {
     var input = try parse_input(a, input_str);
     defer input.deinit();
 
-    const n_seconds = 100;
+    const safety_factor = safety: {
+        const n_seconds = 100;
+        var counter = QuadrantCounter{ .dims = input.dimensions };
+        for (input.robots) |bot| {
+            counter.count(walk_robot(bot, input.dimensions, n_seconds));
+        }
+        break :safety counter.get_safety_factor();
+    };
 
-    var counter = QuadrantCounter{ .dims = input.dimensions };
+    _ = try stdout.print("The safety factor is {}\n", .{safety_factor});
+
+    const easter_egg_seconds = for (1..9000) |seconds| {
+        var counter = QuadrantCounter{ .dims = input.dimensions };
+        for (input.robots) |bot| {
+            counter.count(walk_robot(bot, input.dimensions, @intCast(seconds)));
+        }
+        if (counter.get_christmas_tree_likelihood() > 0.7) break seconds;
+    } else return error.CouldNotFindEasterEgg;
+
+    _ = try stdout.print(
+        "The Christmas tree Easter egg can be reached in {} seconds\n",
+        .{easter_egg_seconds},
+    );
+
+    var display_grid = try utils.Grid(u8).init(
+        a,
+        @intCast(input.dimensions.x),
+        @intCast(input.dimensions.y),
+    );
+    @memset(display_grid.data, ' ');
     for (input.robots) |bot| {
-        counter.count(walk_robot(bot, input.dimensions, n_seconds));
+        const botpos = walk_robot(bot, input.dimensions, @intCast(easter_egg_seconds));
+        display_grid.r(@intCast(botpos.y))[@intCast(botpos.x)] = '.';
     }
-
-    _ = try stdout.print("The sum is {}\n", .{counter.get_safety_factor()});
+    display_grid.log();
 
     try bw.flush();
 }
