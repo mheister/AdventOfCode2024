@@ -67,6 +67,50 @@ test "parse input test" {
     try expectEq(Vec2d{ .x = 11, .y = 5 }, res.dimensions);
 }
 
+fn walk_robot(bot: Robot, dims: Vec2d, seconds: i32) Vec2d {
+    std.debug.assert(bot.velo.x <= dims.x and bot.velo.y <= dims.y);
+    const x = @rem((bot.pos.x + (dims.x + bot.velo.x) * seconds), dims.x);
+    const y = @rem((bot.pos.y + (dims.y + bot.velo.y) * seconds), dims.y);
+    return .{ .x = x, .y = y };
+}
+
+test "walk_robot" {
+    const expectEq = std.testing.expectEqual;
+    const dims = Vec2d{ .x = 11, .y = 7 };
+    {
+        const bot = Robot{ .pos = .{ .x = 0, .y = 0 }, .velo = .{ .x = 1, .y = 0 } };
+        try expectEq(Vec2d{ .x = 0, .y = 0 }, walk_robot(bot, dims, 0));
+        try expectEq(Vec2d{ .x = 1, .y = 0 }, walk_robot(bot, dims, 1));
+        try expectEq(Vec2d{ .x = 10, .y = 0 }, walk_robot(bot, dims, 10));
+        try expectEq(Vec2d{ .x = 0, .y = 0 }, walk_robot(bot, dims, 11));
+        try expectEq(Vec2d{ .x = 1, .y = 0 }, walk_robot(bot, dims, 12));
+        try expectEq(Vec2d{ .x = 0, .y = 0 }, walk_robot(bot, dims, 22));
+    }
+    {
+        const bot = Robot{ .pos = .{ .x = 2, .y = 4 }, .velo = .{ .x = 2, .y = -3 } };
+        try expectEq(Vec2d{ .x = 4, .y = 1 }, walk_robot(bot, dims, 1));
+        try expectEq(Vec2d{ .x = 6, .y = 5 }, walk_robot(bot, dims, 2));
+        try expectEq(Vec2d{ .x = 1, .y = 3 }, walk_robot(bot, dims, 5));
+    }
+}
+
+const QuadrantCounter = struct {
+    dims: Vec2d,
+    quads: [4]usize = [_]usize{ 0, 0, 0, 0 },
+    fn count(self: *@This(), pos: Vec2d) void {
+        const border_coords =
+            Vec2d{ .x = @divFloor(self.dims.x, 2), .y = @divFloor(self.dims.y, 2) };
+        if (pos.x == border_coords.x or pos.y == border_coords.y) return;
+        const qidx: usize =
+            (if (pos.x < border_coords.x) @as(usize, 0) else 1) +
+            (if (pos.y < border_coords.y) @as(usize, 0) else 2);
+        self.quads[qidx] += 1;
+    }
+    fn get_safety_factor(self: @This()) usize {
+        return self.quads[0] * self.quads[1] * self.quads[2] * self.quads[3];
+    }
+};
+
 pub fn main() !void {
     const a = std.heap.page_allocator;
 
@@ -91,11 +135,18 @@ pub fn main() !void {
     };
     defer file.close();
 
-    const input = try file.readToEndAlloc(a, std.math.pow(u32, 2, 20));
-    const data_rows = try parse_input(a, input);
-    defer a.free(data_rows);
+    const input_str = try file.readToEndAlloc(a, std.math.pow(u32, 2, 20));
+    var input = try parse_input(a, input_str);
+    defer input.deinit();
 
-    _ = try stdout.print("The sum is {}\n", .{0});
+    const n_seconds = 100;
+
+    var counter = QuadrantCounter{ .dims = input.dimensions };
+    for (input.robots) |bot| {
+        counter.count(walk_robot(bot, input.dimensions, n_seconds));
+    }
+
+    _ = try stdout.print("The sum is {}\n", .{counter.get_safety_factor()});
 
     try bw.flush();
 }
