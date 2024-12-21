@@ -52,6 +52,43 @@ test "parse input test" {
     try expectEq('<', res.movements[0]);
 }
 
+fn offPos(pos: utils.grid.Pos, dir: u8) ?utils.grid.Pos {
+    switch (dir) {
+        '<' => if (pos.col == 0) return null,
+        '^' => if (pos.row == 0) return null,
+        else => {},
+    }
+    switch (dir) {
+        '<' => return .{ .row = pos.row, .col = pos.col - 1 },
+        '^' => return .{ .row = pos.row - 1, .col = pos.col },
+        '>' => return .{ .row = pos.row, .col = pos.col + 1 },
+        'v' => return .{ .row = pos.row + 1, .col = pos.col },
+        else => unreachable,
+    }
+}
+
+fn move_robot(w: *utils.Grid(u8), dir: u8) !void {
+    const bot_pos = w.indexOf('@') orelse return error.NoBot;
+    const bot_tgt = offPos(bot_pos, dir).?;
+    if (w.atPos(bot_tgt).? == '#') return;
+    if (w.atPos(bot_tgt) == 'O') {
+        var free_spot = offPos(bot_tgt, dir);
+        while (free_spot) |spot| : (free_spot = offPos(spot, dir)) {
+            if (w.atPos(spot) == '#') return;
+            if (w.atPos(spot) == '.') {
+                w.atPosRef(spot).?.* = 'O';
+                break;
+            }
+        }
+    }
+    w.atPosRef(bot_pos).?.* = '.';
+    w.atPosRef(bot_tgt).?.* = '@';
+}
+
+fn gps_coord(pos: utils.grid.Pos) usize {
+    return @as(usize, @intCast(pos.row)) * 100 + @as(usize, @intCast(pos.col));
+}
+
 pub fn main() !void {
     const a = std.heap.page_allocator;
 
@@ -80,7 +117,20 @@ pub fn main() !void {
     var input = try parse_input(a, input_str);
     defer input.deinit();
 
-    _ = try stdout.print("The safety factor is {}\n", .{0});
+    for (input.movements) |move| {
+        try move_robot(&input.warehouse, move);
+    }
+    input.warehouse.log();
+
+    var sum: usize = 0;
+    var pos_it = input.warehouse.allPositions();
+    while (pos_it.next()) |pos| {
+        if (input.warehouse.atPos(pos) == 'O') {
+            sum += gps_coord(pos);
+        }
+    }
+
+    _ = try stdout.print("The sum of GPS coordinates is {}\n", .{sum});
 
     try bw.flush();
 }
