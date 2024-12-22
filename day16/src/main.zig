@@ -36,7 +36,10 @@ fn rotRight(dir: Dir) Dir {
     };
 }
 
-fn findLowestScore(a: std.mem.Allocator, maze: utils.Grid(u8)) !usize {
+fn findLowestScoreAndBestPathTileCount(
+    a: std.mem.Allocator,
+    maze: utils.Grid(u8),
+) !struct { usize, usize } {
     var low_score: usize = std.math.maxInt(usize);
     const State = struct {
         pos: Pos,
@@ -46,6 +49,7 @@ fn findLowestScore(a: std.mem.Allocator, maze: utils.Grid(u8)) !usize {
     };
     const start = maze.indexOf('S') orelse return error.NoStart;
     var bt = std.ArrayList(State).init(a);
+    defer bt.deinit();
     try bt.append(.{
         .pos = start,
         .dir = .e,
@@ -57,6 +61,7 @@ fn findLowestScore(a: std.mem.Allocator, maze: utils.Grid(u8)) !usize {
         }
     };
     var low_score_per_state = std.AutoArrayHashMap(struct { Pos, Dir }, usize).init(a);
+    defer low_score_per_state.deinit();
     var iteration: usize = 0;
     while (bt.items.len > 0) : (iteration += 1) {
         if (iteration % 1024 == 0) {
@@ -64,7 +69,7 @@ fn findLowestScore(a: std.mem.Allocator, maze: utils.Grid(u8)) !usize {
             std.mem.sort(State, bt.items, {}, StateSorter.cmp);
         }
         var state = bt.pop();
-        if (state.score >= low_score) continue;
+        if (state.score > low_score) continue;
         const low_score_entry = try low_score_per_state.getOrPut(.{ state.pos, state.dir });
         if (low_score_entry.found_existing and low_score_entry.value_ptr.* < state.score)
             continue;
@@ -85,7 +90,17 @@ fn findLowestScore(a: std.mem.Allocator, maze: utils.Grid(u8)) !usize {
                 const score = state.score + 1;
                 const tgt = offPos(state.pos, state.dir);
                 switch (maze.atPos(tgt).?) {
-                    'E' => low_score = @min(low_score, score),
+                    'E' => {
+                        low_score = @min(low_score, score);
+                        // push backtrack state so that low_score_per_state entry will be
+                        // created for E
+                        try bt.append(.{
+                            .pos = tgt,
+                            .dir = state.dir,
+                            .moves = .{ null, null, null },
+                            .score = score,
+                        });
+                    },
                     '.' => {
                         try bt.append(.{
                             .pos = tgt,
@@ -126,7 +141,47 @@ fn findLowestScore(a: std.mem.Allocator, maze: utils.Grid(u8)) !usize {
             },
         }
     }
-    return low_score;
+
+    // walk backwards from end on optimal tiles
+    const end = maze.indexOf('E') orelse return error.NoEnd;
+    var opti_tiles = std.AutoArrayHashMap(Pos, void).init(a);
+    defer opti_tiles.deinit();
+    bt.clearRetainingCapacity();
+    for ([_]Dir{ .w, .n, .e, .s }) |dir| {
+        if (low_score_per_state.get(.{ end, dir }) == low_score) {
+            try bt.append(.{ .pos = end, .dir = dir, .score = low_score });
+        }
+    }
+    while (bt.items.len > 0) {
+        const state = bt.pop();
+        try opti_tiles.put(state.pos, {});
+        for (state.moves) |maybe_move| {
+            const move = maybe_move.?;
+            switch (move) {
+                .walk => if (state.score < 1) continue,
+                .rot_left, .rot_right => if (state.score < 1000) continue,
+            }
+            const src_score = switch (move) {
+                .walk => state.score - 1,
+                .rot_left, .rot_right => state.score - 1000,
+            };
+            const src_pos = switch (move) {
+                .walk => offPos(state.pos, rotLeft(rotLeft(state.dir))),
+                else => state.pos,
+            };
+            const src_dir = switch (move) {
+                .rot_left => rotRight(state.dir),
+                .rot_right => rotLeft(state.dir),
+                else => state.dir,
+            };
+            const elm = low_score_per_state.get(.{ src_pos, src_dir });
+            if (elm == src_score) {
+                try bt.append(.{ .pos = src_pos, .dir = src_dir, .score = src_score });
+            }
+        }
+    }
+
+    return .{ low_score, opti_tiles.keys().len };
 }
 
 pub fn main() !void {
@@ -151,9 +206,10 @@ pub fn main() !void {
 
     maze.log();
 
-    const low_score = try findLowestScore(a, maze);
+    const res = try findLowestScoreAndBestPathTileCount(a, maze);
 
-    _ = try stdout.print("The minimal score is {}\n", .{low_score});
+    _ = try stdout.print("The minimal score is {}\n", .{res[0]});
+    _ = try stdout.print("There are {} tiles on best paths\n", .{res[1]});
 
     try bw.flush();
 }
