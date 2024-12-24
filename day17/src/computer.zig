@@ -20,6 +20,7 @@ pub const Computer = struct {
         switch (fetch[0]) {
             0 => try self.adv(fetch[1]),
             1 => try self.bxl(fetch[1]),
+            2 => try self.bst(fetch[1]),
             3 => try self.jnz(fetch[1]),
             else => return error.InvalidOpcode,
         }
@@ -50,6 +51,10 @@ pub const Computer = struct {
     }
     fn bxl(self: *@This(), operand: u8) Error!void {
         self.reg_b = self.reg_b ^ operand;
+    }
+    fn bst(self: *@This(), operand: u8) Error!void {
+        const operand_resolved = try self.combo(operand);
+        self.reg_b = operand_resolved & 0b111;
     }
     fn jnz(self: *@This(), operand: u8) Error!void {
         if (self.reg_a != 0) {
@@ -126,6 +131,23 @@ test "bxl" {
     {
         const program = [_]u8{ 1, 0b000 };
         var c = Computer{ .reg_b = 0b111, .program = &program };
+        _ = try c.step();
+        try expectEq(0b111, c.reg_b);
+    }
+}
+
+test "bst" {
+    // immediate
+    {
+        const program = [_]u8{ 2, 2 };
+        var c = Computer{ .program = &program };
+        _ = try c.step();
+        try expectEq(2, c.reg_b);
+    }
+    // reg
+    {
+        const program = [_]u8{ 2, 4 }; // bst combo 4 for reg_a
+        var c = Computer{ .reg_a = 0b111111, .program = &program };
         _ = try c.step();
         try expectEq(0b111, c.reg_b);
     }
