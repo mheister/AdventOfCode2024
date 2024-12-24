@@ -4,6 +4,7 @@ comptime {
 }
 
 const std = @import("std");
+const computer = @import("computer.zig");
 
 const Input = struct {
     reg_a: usize,
@@ -96,7 +97,45 @@ pub fn main() !void {
     const input = try parse_input(a, input_str);
     defer a.free(input.program);
 
-    _ = try stdout.print("The output is {}\n", .{0});
+    var output = std.ArrayList(u3).init(a);
+    defer output.deinit();
+
+    var printer = ArrayListPrinter{ .array_list = &output };
+
+    var c = computer.Computer{
+        .reg_a = input.reg_a,
+        .reg_b = input.reg_b,
+        .reg_c = input.reg_c,
+        .program = input.program,
+        .printer = printer.get(),
+    };
+
+    for (0..9000) |_| {
+        if (try c.step() == .halted) break;
+    }
+
+    _ = try stdout.print("Output: ", .{});
+
+    if (output.items.len > 0) {
+        _ = try stdout.print("{}", .{output.items[0]});
+    }
+    for (output.items[1..]) |o| {
+        _ = try stdout.print(",{}", .{o});
+    }
 
     try bw.flush();
 }
+
+const ArrayListPrinter = struct {
+    array_list: *std.ArrayList(u3),
+    fn print(self_o: *anyopaque, data: u3) !void {
+        const self: *@This() = @ptrCast(@alignCast(self_o));
+        try self.array_list.append(data);
+    }
+    fn get(self: *@This()) computer.Printer {
+        return .{
+            .user = self,
+            .print_fn = print,
+        };
+    }
+};
