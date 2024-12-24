@@ -5,14 +5,14 @@ pub fn log_disasm(program: []const u8) !void {
     var ip: usize = 0;
     while (ip < program.len - 1) : (ip += 2) {
         const op: [:0]const u8 = switch (program[ip]) {
-            0 => "div #a, ",
+            0 => "div #a, 2^",
             1 => "xor #b, ",
             2 => "st  #b, ",
             3 => "jnz #a, ",
             4 => "xor #b, #c",
             5 => "out ",
-            6 => "div #b, #a, ",
-            7 => "div #c, #a, ",
+            6 => "div #b, #a, 2^",
+            7 => "div #c, #a, 2^",
             else => "INV ",
         };
         var operand_buf: [12:0]u8 = undefined;
