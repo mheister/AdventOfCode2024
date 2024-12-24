@@ -26,6 +26,8 @@ pub const Computer = struct {
             3 => try self.jnz(fetch[1]),
             4 => try self.bxc(fetch[1]),
             5 => try self.out(fetch[1]),
+            6 => try self.bdv(fetch[1]),
+            7 => try self.cdv(fetch[1]),
             else => return error.InvalidOpcode,
         }
         return .ok;
@@ -89,6 +91,16 @@ pub const Computer = struct {
             };
         } else return error.MissingPrinter;
     }
+
+    fn bdv(self: *@This(), operand: u8) Error!void {
+        const operand_resolved = try self.combo(operand);
+        self.reg_b = self.reg_a / (@as(usize, 1) << @intCast(operand_resolved));
+    }
+
+    fn cdv(self: *@This(), operand: u8) Error!void {
+        const operand_resolved = try self.combo(operand);
+        self.reg_c = self.reg_a / (@as(usize, 1) << @intCast(operand_resolved));
+    }
 };
 
 pub const Printer = struct {
@@ -128,7 +140,8 @@ test "ip_advances" {
     }
 }
 
-test "adv_immediate" {
+test "adv" {
+    // immediates
     {
         const program = [_]u8{ 0, 0 };
         var c = Computer{ .reg_a = 8, .program = &program };
@@ -147,9 +160,7 @@ test "adv_immediate" {
         _ = try c.step();
         try expectEq(2, c.reg_a);
     }
-}
-
-test "adv_reg" {
+    // register
     {
         const program = [_]u8{ 0, 5 }; // div combo 5 for reg_b
         var c = Computer{ .reg_a = 8, .reg_b = 1, .program = &program };
@@ -252,5 +263,63 @@ test "out" {
         const program = [_]u8{ 5, 1 };
         var c = Computer{ .program = &program, .printer = printer.get() };
         try std.testing.expectError(error.PrintError, c.step());
+    }
+}
+
+test "bdv" {
+    // immediates
+    {
+        const program = [_]u8{ 6, 0 };
+        var c = Computer{ .reg_a = 8, .program = &program };
+        _ = try c.step();
+        try expectEq(8, c.reg_b);
+    }
+    {
+        const program = [_]u8{ 6, 1 };
+        var c = Computer{ .reg_a = 8, .program = &program };
+        _ = try c.step();
+        try expectEq(4, c.reg_b);
+    }
+    {
+        const program = [_]u8{ 6, 2 };
+        var c = Computer{ .reg_a = 8, .program = &program };
+        _ = try c.step();
+        try expectEq(2, c.reg_b);
+    }
+    // register
+    {
+        const program = [_]u8{ 6, 5 }; // div combo 5 for reg_b
+        var c = Computer{ .reg_a = 8, .reg_b = 1, .program = &program };
+        _ = try c.step();
+        try expectEq(4, c.reg_b);
+    }
+}
+
+test "cdv" {
+    // immediates
+    {
+        const program = [_]u8{ 7, 0 };
+        var c = Computer{ .reg_a = 8, .program = &program };
+        _ = try c.step();
+        try expectEq(8, c.reg_c);
+    }
+    {
+        const program = [_]u8{ 7, 1 };
+        var c = Computer{ .reg_a = 8, .program = &program };
+        _ = try c.step();
+        try expectEq(4, c.reg_c);
+    }
+    {
+        const program = [_]u8{ 7, 2 };
+        var c = Computer{ .reg_a = 8, .program = &program };
+        _ = try c.step();
+        try expectEq(2, c.reg_c);
+    }
+    // register
+    {
+        const program = [_]u8{ 7, 5 }; // div combo 5 for reg_b
+        var c = Computer{ .reg_a = 8, .reg_b = 1, .program = &program };
+        _ = try c.step();
+        try expectEq(4, c.reg_c);
     }
 }
