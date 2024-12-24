@@ -19,6 +19,7 @@ pub const Computer = struct {
         const fetch = self.program[self.ip .. self.ip + 2];
         switch (fetch[0]) {
             0 => try self.adv(fetch[1]),
+            1 => try self.bxl(fetch[1]),
             else => return error.InvalidOpcode,
         }
         return .ok;
@@ -45,6 +46,9 @@ pub const Computer = struct {
     fn adv(self: *@This(), operand: u8) Error!void {
         const operand_resolved = try self.combo(operand);
         self.reg_a = self.reg_a / (@as(usize, 1) << @intCast(operand_resolved));
+    }
+    fn bxl(self: *@This(), operand: u8) Error!void {
+        self.reg_b = self.reg_b ^ operand;
     }
 };
 
@@ -103,5 +107,20 @@ test "adv_reg" {
         var c = Computer{ .reg_a = 8, .reg_b = 1, .program = &program };
         _ = try c.step();
         try expectEq(4, c.reg_a);
+    }
+}
+
+test "bxl" {
+    {
+        const program = [_]u8{ 1, 0b101 };
+        var c = Computer{ .reg_b = 0b111, .program = &program };
+        _ = try c.step();
+        try expectEq(0b010, c.reg_b);
+    }
+    {
+        const program = [_]u8{ 1, 0b000 };
+        var c = Computer{ .reg_b = 0b111, .program = &program };
+        _ = try c.step();
+        try expectEq(0b111, c.reg_b);
     }
 }
