@@ -12,14 +12,15 @@ pub const Computer = struct {
     ip: usize = 0,
     program: []const u8,
     pub fn step(self: *@This()) Error!StepResult {
-        defer self.ip += 2;
         if (self.ip >= self.program.len) {
             return .halted;
         }
         const fetch = self.program[self.ip .. self.ip + 2];
+        self.ip += 2;
         switch (fetch[0]) {
             0 => try self.adv(fetch[1]),
             1 => try self.bxl(fetch[1]),
+            3 => try self.jnz(fetch[1]),
             else => return error.InvalidOpcode,
         }
         return .ok;
@@ -49,6 +50,11 @@ pub const Computer = struct {
     }
     fn bxl(self: *@This(), operand: u8) Error!void {
         self.reg_b = self.reg_b ^ operand;
+    }
+    fn jnz(self: *@This(), operand: u8) Error!void {
+        if (self.reg_a != 0) {
+            self.ip = @intCast(operand);
+        }
     }
 };
 
@@ -122,5 +128,17 @@ test "bxl" {
         var c = Computer{ .reg_b = 0b111, .program = &program };
         _ = try c.step();
         try expectEq(0b111, c.reg_b);
+    }
+}
+
+test "jnz" {
+    {
+        const program = [_]u8{ 3, 8, 3, 8 };
+        var c = Computer{ .reg_a = 0, .program = &program };
+        _ = try c.step();
+        try expectEq(2, c.ip); // a == 0 -> no jump
+        c.reg_a = 11;
+        _ = try c.step();
+        try expectEq(8, c.ip);
     }
 }
