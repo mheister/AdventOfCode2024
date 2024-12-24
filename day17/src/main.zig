@@ -5,6 +5,7 @@ comptime {
 
 const std = @import("std");
 const computer = @import("computer.zig");
+const log_disasm = @import("disasm.zig").log_disasm;
 
 const Input = struct {
     reg_a: usize,
@@ -96,6 +97,8 @@ pub fn main() !void {
     const input_str = try file.readToEndAlloc(a, std.math.pow(u32, 2, 20));
     const input = try parse_input(a, input_str);
     defer a.free(input.program);
+
+    try log_disasm(input.program);
 
     var output = std.ArrayList(u3).init(a);
     defer output.deinit();
