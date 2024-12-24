@@ -2,7 +2,7 @@ const std = @import("std");
 
 const expectEq = std.testing.expectEqual;
 
-pub const Error = error{ InvalidOpcode, InvalidCombo };
+pub const Error = error{ InvalidOpcode, InvalidCombo, MissingPrinter, PrintError };
 pub const StepResult = enum { ok, halted };
 
 pub const Computer = struct {
@@ -11,6 +11,7 @@ pub const Computer = struct {
     reg_c: usize = 0,
     ip: usize = 0,
     program: []const u8,
+    printer: ?Printer = null,
     pub fn step(self: *@This()) Error!StepResult {
         if (self.ip >= self.program.len) {
             return .halted;
@@ -22,9 +23,13 @@ pub const Computer = struct {
             1 => try self.bxl(fetch[1]),
             2 => try self.bst(fetch[1]),
             3 => try self.jnz(fetch[1]),
+            5 => try self.out(fetch[1]),
             else => return error.InvalidOpcode,
         }
         return .ok;
+    }
+    pub fn setPrinter(self: *@This(), p: Printer) void {
+        self.printer = p;
     }
     fn combo(self: *const @This(), operand: u8) Error!usize {
         return switch (operand) {
@@ -60,6 +65,24 @@ pub const Computer = struct {
         if (self.reg_a != 0) {
             self.ip = @intCast(operand);
         }
+    }
+    fn out(self: *@This(), operand: u8) Error!void {
+        if (self.printer) |printer| {
+            const operand_resolved = try self.combo(operand);
+            printer.print(@intCast(operand_resolved & 0b111)) catch |err| {
+                std.log.warn("Failed to print: {!}", .{err});
+                return error.PrintError;
+            };
+        } else return error.MissingPrinter;
+    }
+};
+
+pub const Printer = struct {
+    user: *anyopaque,
+    print_fn: *const fn (user: *anyopaque, data: u3) anyerror!void,
+
+    fn print(self: @This(), data: u3) !void {
+        return self.print_fn(self.user, data);
     }
 };
 
@@ -162,5 +185,49 @@ test "jnz" {
         c.reg_a = 11;
         _ = try c.step();
         try expectEq(8, c.ip);
+    }
+}
+
+const OneTimePrinter = struct {
+    output: ?u3 = null,
+    fn print(self_o: *anyopaque, data: u3) !void {
+        const self: *@This() = @ptrCast(@alignCast(self_o));
+        if (self.output != null) return error.AlreadyPrinted;
+        self.output = data;
+    }
+    fn get(self: *@This()) Printer {
+        return .{
+            .user = self,
+            .print_fn = print,
+        };
+    }
+};
+
+test "out" {
+    {
+        const program = [_]u8{ 5, 1 };
+        var c = Computer{ .program = &program };
+        try std.testing.expectError(error.MissingPrinter, c.step());
+    }
+    {
+        var printer = OneTimePrinter{};
+        const program = [_]u8{ 5, 1 };
+        var c = Computer{ .program = &program, .printer = printer.get() };
+        _ = try c.step();
+        try expectEq(1, printer.output);
+    }
+    {
+        var printer = OneTimePrinter{};
+        const program = [_]u8{ 5, 4 };
+        var c = Computer{ .reg_a = 7, .program = &program, .printer = printer.get() };
+        _ = try c.step();
+        try expectEq(7, printer.output);
+    }
+    {
+        // OneTimePrinter errros with pre-set value -> should error on step
+        var printer = OneTimePrinter{ .output = 0 };
+        const program = [_]u8{ 5, 1 };
+        var c = Computer{ .program = &program, .printer = printer.get() };
+        try std.testing.expectError(error.PrintError, c.step());
     }
 }
