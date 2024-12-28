@@ -7,7 +7,7 @@ pub fn log_disasm(program: []const u8) !void {
         const op: [:0]const u8 = switch (program[ip]) {
             0 => "div #a, 2^",
             1 => "xor #b, ",
-            2 => "st  #b, ",
+            2 => "st  #b, 0b111 & ",
             3 => "jnz #a, ",
             4 => "xor #b, #c",
             5 => "out ",

@@ -126,6 +126,55 @@ pub fn main() !void {
         _ = try stdout.print(",{}", .{o});
     }
 
+    // Part 2: (given my input)
+    // - #a needs to be at least 8^(proglen - 1)
+    // - oup = (b6 ^ c4).l = (reg_a.l ^ 1 ^ (reg_a / 2^(reg_a.l ^ 2))).l
+    // - for step N: oup := U => reg_a.l ^ 1 ^ (reg_a / 2^(reg_a.l ^ 2)) = U
+    // => reg_a.l ^ U ^ 1 = reg_a / 2^(reg_a.l ^ 2)
+    // for U=1, 2^(reg_a.l ^ 2) = 1 + 8*X
+    // - div by 8 is like shift 3 and so on..
+    // - input reg_a is 64584136 = 11.110.110.010.111.100.111.001.000
+    // - high bits of reg_a's init value don't seem to influence low early outputs
+
+    // fix an init value for reg A, fix outputs one by one from the end
+    var try_a: usize = 0;
+    var chk_idx: usize = 15;
+    while (true) {
+        const start = (try_a >> @intCast(chk_idx * 3)) & 7;
+        std.log.debug("attempting {} - start={o} reg a={o}", .{ chk_idx, start, try_a });
+        for (start..9) |v| {
+            const try_a_sub = try_a //
+            & ~(@as(usize, 7) << @intCast(chk_idx * 3)) //
+            | ((v & 7) << @intCast(chk_idx * 3));
+            std.log.debug("  -{}- a={o}", .{ v, try_a_sub });
+            output.clearRetainingCapacity();
+            c.reg_a = try_a_sub;
+            c.ip = 0;
+            for (0..9000) |_| {
+                if (try c.step() == .halted) break;
+            }
+            if (output.items.len < 15) continue;
+            if (output.items[chk_idx] == input.program[chk_idx]) {
+                try_a = try_a_sub;
+                break;
+            }
+        } else {
+            std.log.debug("no sol for {} - reg a={b}", .{ chk_idx, try_a });
+            // try_a = try_a | (@as(usize, 7) << @intCast(chk_idx * 3));
+            try_a = try_a & ~(@as(usize, 7) << @intCast(chk_idx * 3));
+            // backtrack to an earlier position
+            chk_idx += 1;
+            const prev_start = (try_a >> @intCast(chk_idx * 3)) & 7;
+            try_a = try_a //
+            & ~(@as(usize, 7) << @intCast(chk_idx * 3)) //
+            | ((prev_start + 1) << @intCast(chk_idx * 3));
+            continue;
+        }
+        if (chk_idx == 0) break;
+        chk_idx -= 1;
+    }
+    _ = try stdout.print("\nReplicating A value: {}\n", .{try_a});
+
     try bw.flush();
 }
 
